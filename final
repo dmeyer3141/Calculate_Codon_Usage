@@ -1,0 +1,112 @@
+#!/usr/bin/env python
+
+import collections 
+import argparse
+import sys
+from Bio import SeqIO
+import os
+
+#########################################################################
+# Functions to calculate dinuc, junc dinuc, codon and bicod frequencies #
+#     parameters for all function is an OrderedDict object and a string #
+#     used to update counts in the dict object                          #
+#########################################################################
+
+def calc_dinucs(sequence, this_DinucsDict):
+    if len(sequence) >= 2:
+        for i in range(0,len(sequence)-1, 1):
+            temp_str = sequence[i:i+2]
+            this_DinucsDict[temp_str] += 1
+            
+def calc_junc_dinucs(sequence, this_DinucsDict):
+    if len(sequence) >= 6:
+        for i in range(0, len(sequence)-5, 3):
+            temp_str = sequence[i+2:i+4]
+            this_DinucsDict[temp_str] += 1
+            
+def calc_codons(sequence, this_CodonsDict):
+    if len(sequence) >= 3:
+        for i in range(0, len(sequence)-2, 3):
+            temp_str = sequence[i:i+3]
+            this_CodonsDict[temp_str] += 1
+            
+def calc_bicodons(sequence, this_BicodonsDict):
+    if len(sequence) >= 6:
+        for i in range(0, len(sequence)-5, 3):
+            temp_str = sequence[i:i+6]
+            this_BicodonsDict[temp_str] += 1
+
+########################################################################################    
+#Takes each file in folder. Can be just one file. Total usage calculated for each file.#
+########################################################################################
+
+#TODO: debug this step
+#1. what if other files are in the given folder
+
+def calculate_codon_usage(folder):
+  #for each fasta file in given directory
+    datfiles = os.listdir('%s/' % (folder))
+    for file in datfiles:
+        name = file.split('.')
+        filename = name[0]
+        fasta_sequences = SeqIO.parse(open('%s/%s' % (folder , file)), 'fasta')
+        
+      #initialize dictionaries for this file
+        CodonsDict = collections.OrderedDict((first+second+third,0) for second in 'TCAG' for first in 'TCAG' for third in 'TCAG')  # initialize w/ acceptable keys
+        #{'TTT':0,'TTC':0,...,'GGG':0}
+        BicodonsDict = collections.OrderedDict((first+second,0) for first in CodonsDict.keys() for second in CodonsDict.keys())
+        #{'TTTTTT':0, 'TTTTTC':0,...,'GGGGGG':0}    
+        DinucsDict = collections.OrderedDict((first+second,0) for first in 'ATGC' for second in 'ATGC')                                
+        #{'AA':0,'AT':0,...,'CC':0}
+        JuncDinucsDict = DinucsDict.copy()
+
+      #update counts using all sequences present in this file
+        for fasta in fasta_sequences:
+            name, sequence = fasta.id, str(fasta.seq)
+            calc_dinucs(sequence, DinucsDict)
+            calc_junc_dinucs(sequence, JuncDinucsDict)
+            calc_codons(sequence, CodonsDict)
+            calc_bicodons(sequence, BicodonsDict)
+      
+      #write counts to output files
+        with open('%s/%s_dinucs.csv' % (folder , filename), 'w') as outfh1:
+            outfh1.write("Dinucleotide,Count\n")
+            for d in DinucsDict.keys():
+                outstr = "%s,%s\n" % (d, str(DinucsDict[d]))
+                outfh1.write(outstr)
+
+        with open('%s/%s_junc_dinucs.csv' % (folder , filename), "w") as outfh2:
+            outfh2.write("Junction Dinucleotide,Count\n")
+            for j in JuncDinucsDict.keys():
+                outstr = "%s,%s\n" % (j, str(JuncDinucsDict[j]))
+                outfh2.write(outstr)
+
+        with open('%s/%s_codons.csv' % (folder , filename), "w") as outfh3:
+            outfh3.write("Codon,Count\n")
+            for c in CodonsDict.keys():
+                outstr = "%s,%s\n" % (c, str(CodonsDict[c]))
+                outfh3.write(outstr)
+
+        with open('%s/%s_bicodons.csv' % (folder , filename), "w") as outfh4:
+            outfh4.write("Bicodon,Count\n")
+            for b in BicodonsDict.keys():
+                outstr = "%s,%s\n" % (b, str(BicodonsDict[b]))
+                outfh4.write(outstr)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description = "Folder Selector")
+    parser.add_argument("folder", help = "Full Folder Path")
+    args = parser.parse_args()
+    calculate_codon_usage(args.folder)
+    
+  #Notes  
+    #1. folder given must be full path
+    #2. output directory is same as input; might want to change
+    #3. especially with 2., need to validate files in folder since this only works
+    #   on .txt/.fa files. One option is to remove all files from datfiles if they 
+    #   don't contain sequences 
+    #4. I wrote and debugged this in a Jupyter notebook. I did not get a chance to test 
+    #   'if __name__' section of code, but I caught some bugs by eye. 
+    #5. I wasn't sure how to handle a situation where an empty folder was provided; 
+    #   this code essentially ignores it (no output files generated, no error message printed)
+    #   might want to change.
